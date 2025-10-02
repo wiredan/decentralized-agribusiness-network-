@@ -1,0 +1,58 @@
+name: Debug & Deploy to Cloudflare
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Setup Node.js (change version if needed)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # Install dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # Run lint
+      - name: Run linter
+        run: npm run lint --if-present
+
+      # Run tests
+      - name: Run tests
+        run: npm test --if-present
+
+      # Build project
+      - name: Build project
+        run: npm run build --if-present
+
+      # Check app size (must be < 250 MB)
+      - name: Check app size
+        id: sizecheck
+        run: |
+          SIZE=$(du -sm . | cut -f1)
+          echo "App size: $SIZE MB"
+          if [ "$SIZE" -gt 250 ]; then
+            echo "❌ App size exceeds 250 MB limit."
+            exit 1
+          fi
+
+      # Deploy to Cloudflare (using Wrangler)
+      - name: Deploy to Cloudflare
+        if: success() && steps.sizecheck.outcome == 'success'
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
